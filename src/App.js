@@ -54,6 +54,33 @@ function parseSalary(str) {
 
 function fmtSalary(n) { return n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`; }
 
+// ── Role extraction from URL slug ─────────────────────────────────────────────
+function extractRoleFromUrl(url) {
+  if (!url || url.length < 10) return null;
+  try {
+    const u = new URL(url);
+    const segments = u.pathname.split('/').filter(Boolean);
+    const noise = new Set(['jobs','careers','apply','application','positions','openings','job','posting','view','req','jobid','requisition','en','us','en-us','en-gb','gb','in','job-detail','details','detail','search','results','listing','listings','external','public']);
+    const candidates = segments.filter(s =>
+      s.length > 5 &&
+      !/^[\d]+$/.test(s) &&         // skip pure number segments
+      !noise.has(s.toLowerCase()) &&
+      s.includes('-')                // slug-style segments have hyphens
+    );
+    if (candidates.length === 0) return null;
+    // Prefer the segment with the most words (hyphens)
+    const best = candidates.sort((a, b) => b.split('-').length - a.split('-').length)[0];
+    // Strip trailing year or numeric IDs like -2026, -R12345
+    const cleaned = best.replace(/[-_][Rr]?\d{3,}$/, '').replace(/-+$/, '');
+    const words = cleaned.split('-').filter(w => w.length > 0);
+    if (words.length < 2) return null;
+    // Title-case each word
+    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  } catch(e) {
+    return null;
+  }
+}
+
 function getThisWeekRange() {
   const today = new Date();
   const dow = today.getDay(); // 0=Sun
@@ -482,6 +509,15 @@ function JobDetailPanel({ job, onClose, onUpdate, onDelete }) {
           </select>
         </div>
 
+        {/* Role */}
+        <div className="detail-section">
+          <label className="detail-label">
+            Role / Position
+            {!form.role && <span className="role-hint"> — paste the job URL below to auto-fill</span>}
+          </label>
+          <input className="text-input sm" value={form.role || ''} onChange={up('role')} placeholder="e.g. Software Engineer Intern"/>
+        </div>
+
         {/* Dates */}
         <div className="detail-2col">
           <div className="detail-section">
@@ -505,7 +541,25 @@ function JobDetailPanel({ job, onClose, onUpdate, onDelete }) {
           <div className="detail-section">
             <label className="detail-label">Job URL</label>
             <div className="url-row">
-              <input className="text-input sm" value={form.url || ''} onChange={up('url')} placeholder="https://..."/>
+              <input className="text-input sm" value={form.url || ''} onChange={e => {
+                const url = e.target.value;
+                setForm(f => ({ ...f, url }));
+                onUpdate(job.id, { url });
+                // Auto-extract role from URL slug if role is blank
+                if (!form.role && url.length > 10) {
+                  const extracted = extractRoleFromUrl(url);
+                  if (extracted) {
+                    setForm(f => ({ ...f, url, role: extracted }));
+                    onUpdate(job.id, { url, role: extracted });
+                  }
+                }
+              }} placeholder="https://..." onBlur={e => {
+                // Also try extraction on blur if still no role
+                if (!form.role && form.url) {
+                  const extracted = extractRoleFromUrl(form.url);
+                  if (extracted) { setForm(f => ({ ...f, role: extracted })); onUpdate(job.id, { role: extracted }); }
+                }
+              }}/>
               {form.url && <a href={form.url} target="_blank" rel="noreferrer" className="url-link btn btn-outline">↗</a>}
             </div>
           </div>
@@ -767,6 +821,8 @@ export default function App() {
   const [showAddModal,setShowAddModal]= useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [weeklyGoal,  setWeeklyGoal]  = useState(() => parseInt(localStorage.getItem('jt-goal') || '10'));
+  const [editingRoleId, setEditingRoleId] = useState(null);
+  const [roleInput,     setRoleInput]     = useState('');
 
   // Chat
   const [chatOpen,     setChatOpen]     = useState(false);
@@ -915,7 +971,7 @@ export default function App() {
       for (const q of queries) {
         let pt = null;
         do {
-          const p = { userId: 'me', q, maxResults: 50 };
+          const p = { userId: 'me', q: q + ' after:2026/01/01', maxResults: 50 };
           if (pt) p.pageToken = pt;
           const res = await window.gapi.client.gmail.users.messages.list(p);
           (res.result.messages || []).forEach(m => allIds.add(m.id));
@@ -1204,7 +1260,17 @@ ${batch.map((e, idx) => `[${idx}]\nFrom: ${e.from}\nSubject: ${e.subject}\nDate:
                           <tr key={job.id} className={`job-row ${isOverdue?'overdue-row':''}`} onClick={() => setSelectedJob(job)}>
                             <td className="row-num">{idx+1}</td>
                             <td className="company-cell">{job.company||'—'}{job.notes && <span className="notes-dot" title="Has notes">•</span>}</td>
-                            <td className="role-cell">{job.role||'—'}</td>
+                            <td className="role-cell" onClick={e => { e.stopPropagation(); setEditingRoleId(job.id); setRoleInput(job.role || ''); }}>
+                              {editingRoleId === job.id
+                                ? <input className="role-edit-input" value={roleInput} autoFocus
+                                    onChange={e => setRoleInput(e.target.value)}
+                                    onBlur={() => { updateJob(job.id, { role: roleInput.trim() }); setEditingRoleId(null); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') { updateJob(job.id, { role: roleInput.trim() }); setEditingRoleId(null); } if (e.key === 'Escape') setEditingRoleId(null); e.stopPropagation(); }}
+                                    onClick={e => e.stopPropagation()}
+                                  />
+                                : <span className={job.role ? 'role-text' : 'role-empty'} title="Click to edit role">{job.role || '+ add role'}</span>
+                              }
+                            </td>
                             <td className="date-cell">{job.date||'—'}</td>
                             <td className="date-cell" onClick={e => e.stopPropagation()}>
                               {job.followUpDate

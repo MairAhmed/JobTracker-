@@ -144,7 +144,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-displa
 .row-num  { color: var(--text2); font-family: var(--font-mono); font-size: 11px; width: 36px; }
 .company-cell { font-weight: 700; }
 .notes-dot  { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; opacity: 0.7; }
-.role-cell  { color: var(--text2); }
+.role-cell  { color: var(--text2); cursor: text; min-width: 120px; }
+.role-text  { display: block; }
+.role-empty { color: var(--accent); opacity: 0.5; font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.3px; }
+.role-empty:hover { opacity: 0.85; }
+.role-edit-input { width: 100%; background: var(--bg); border: 1px solid var(--accent); border-radius: 5px; color: var(--text); font-family: var(--font-display); font-size: 13px; padding: 4px 8px; outline: none; box-shadow: 0 0 0 2px rgba(74,158,255,0.15); }
+.role-hint { font-style: italic; color: var(--text2); opacity: 0.7; font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .date-cell  { font-family: var(--font-mono); font-size: 11px; color: var(--text2); white-space: nowrap; }
 .add-followup { color: var(--accent); font-size: 11px; cursor: pointer; opacity: 0.6; font-family: var(--font-mono); }
 .add-followup:hover { opacity: 1; }
